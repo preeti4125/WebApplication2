@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using WebApiPractice.DTOs;
-using WebApiPractice.Models;
 using WebApiPractice.Services;
 
 namespace WebApiPractice.Controllers;
@@ -9,44 +8,62 @@ namespace WebApiPractice.Controllers;
 [Route("api/students")]
 public class StudentController : ControllerBase
 {
-    private readonly StudentService _studentService;
+    private readonly IStudentService _studentService;
 
-    public StudentController(StudentService studentService)
+    public StudentController(IStudentService studentService)
     {
         _studentService = studentService;
     }
 
     // GET: api/students
     [HttpGet]
-    public ActionResult<List<Student>> GetAllStudents()
+    public async Task<ActionResult<List<StudentDto>>> GetAllStudents()
     {
-        return Ok(_studentService.GetAllStudents());
+        var students = await _studentService.GetAllStudentsAsync();
+
+        return Ok(students);
     }
 
     // GET: api/students/1
     [HttpGet("{id}")]
-    public ActionResult<Student> GetStudentById(int id)
+    public async Task<ActionResult<StudentDto>> GetStudentById(int id)
     {
-        var student = _studentService.GetStudentById(id);
+        if (id <= 0)
+        {
+            return BadRequest(new
+            {
+                message = "Student ID must be greater than zero."
+            });
+        }
 
-        if (student == null)
-            return NotFound(new { message = "Student not found." });
+        var student = await _studentService.GetStudentByIdAsync(id);
+
+        if (student is null)
+        {
+            return NotFound(new
+            {
+                message = "Student not found."
+            });
+        }
 
         return Ok(student);
     }
 
     // POST: api/students
     [HttpPost]
-    public ActionResult<Student> AddStudent(CreateStudentDto studentDto)
+    public async Task<ActionResult<StudentDto>> AddStudent(
+        CreateStudentDto studentDto)
     {
-        var student = new Student
+        if (await _studentService.EmailExistsAsync(studentDto.Email))
         {
-            Name = studentDto.Name,
-            Email = studentDto.Email,
-            Age = studentDto.Age
-        };
+            return Conflict(new
+            {
+                message = "A student with this email already exists."
+            });
+        }
 
-        var createdStudent = _studentService.AddStudent(student);
+        var createdStudent =
+            await _studentService.AddStudentAsync(studentDto);
 
         return CreatedAtAction(
             nameof(GetStudentById),
@@ -56,24 +73,61 @@ public class StudentController : ControllerBase
 
     // PUT: api/students/1
     [HttpPut("{id}")]
-    public ActionResult<Student> UpdateStudent(int id, Student updatedStudent)
+    public async Task<ActionResult<StudentDto>> UpdateStudent(
+        int id,
+        UpdateStudentDto studentDto)
     {
-        var student = _studentService.UpdateStudent(id, updatedStudent);
+        if (id <= 0)
+        {
+            return BadRequest(new
+            {
+                message = "Student ID must be greater than zero."
+            });
+        }
 
-        if (student == null)
-            return NotFound(new { message = "Student not found." });
+        if (await _studentService.EmailExistsAsync(studentDto.Email, id))
+        {
+            return Conflict(new
+            {
+                message = "Another student with this email already exists."
+            });
+        }
 
-        return Ok(student);
+        var updatedStudent =
+            await _studentService.UpdateStudentAsync(id, studentDto);
+
+        if (updatedStudent is null)
+        {
+            return NotFound(new
+            {
+                message = "Student not found."
+            });
+        }
+
+        return Ok(updatedStudent);
     }
 
     // DELETE: api/students/1
     [HttpDelete("{id}")]
-    public IActionResult DeleteStudent(int id)
+    public async Task<IActionResult> DeleteStudent(int id)
     {
-        var deleted = _studentService.DeleteStudent(id);
+        if (id <= 0)
+        {
+            return BadRequest(new
+            {
+                message = "Student ID must be greater than zero."
+            });
+        }
+
+        var deleted = await _studentService.DeleteStudentAsync(id);
 
         if (!deleted)
-            return NotFound(new { message = "Student not found." });
+        {
+            return NotFound(new
+            {
+                message = "Student not found."
+            });
+        }
 
         return NoContent();
     }
